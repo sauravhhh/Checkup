@@ -263,7 +263,8 @@ $('quickBtn').addEventListener('click', async () => {
 <script>
 "use strict";
 /* ================= SCREEN ================= */
-function toolScreen(body) {
+function toolScreen(body, opts) {
+  opts = opts || {};
   const colors = [
     ['#ffffff', 'White — look for dark spots'],
     ['#000000', 'Black — look for bright spots'],
@@ -280,7 +281,7 @@ function toolScreen(body) {
   count.style.cssText = 'margin-top:8px;font-size:12px;color:#fff;mix-blend-mode:difference;opacity:.7;';
   const exit = el('button', '', '✕');
   exit.style.cssText = 'position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:50%;border:none;background:rgba(128,128,128,.35);color:#fff;font-size:18px;mix-blend-mode:difference;';
-  exit.addEventListener('click', e => { e.stopPropagation(); closeTool(); });
+  exit.addEventListener('click', e => { e.stopPropagation(); opts.onExit ? opts.onExit() : closeTool(); });
   function draw() {
     wrap.style.background = colors[i][0];
     label.textContent = colors[i][1];
@@ -451,10 +452,10 @@ function toolVibration(body) {
 <script>
 "use strict";
 /* ================= CAMERA ================= */
-function toolCamera(body) {
+function toolCamera(body, defFacing) {
   body.appendChild(hint('Preview each camera. Capture a photo to check focus and colour.'));
   const wrap = el('div'); body.appendChild(wrap);
-  let stream = null, facing = 'environment';
+  let stream = null, facing = defFacing || 'environment';
   const startBtn = btn('Start camera', start);
   body.appendChild(startBtn);
   async function start() {
@@ -810,3 +811,252 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
+
+<style>
+.drawbadge{ position:absolute; top:12px; left:0; right:0; text-align:center; font-size:14px; font-weight:700; pointer-events:none; z-index:2; }
+.drawexit{ position:absolute; top:12px; right:12px; width:44px; height:44px; border-radius:50%; border:1px solid var(--line); background:var(--bg); color:var(--ink); font-size:18px; z-index:3; cursor:pointer; }
+.drawclear{ position:absolute; bottom:18px; left:50%; transform:translateX(-50%); border:1px solid var(--line); background:var(--bg); color:var(--ink); border-radius:20px; padding:10px 26px; font-size:14px; font-weight:700; font-family:inherit; z-index:3; cursor:pointer; }
+</style>
+<script>
+"use strict";
+/* ================= DRAW TEST (full-screen paint) ================= */
+function toolDraw(body, opts) {
+  opts = opts || {};
+  const css = getComputedStyle(document.body);
+  const ink = css.getPropertyValue('--ink').trim() || '#111';
+  const bg = css.getPropertyValue('--bg').trim() || '#fff';
+  const cv = el('canvas');
+  cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair;';
+  body.appendChild(cv);
+  const badge = el('div', 'drawbadge', 'Paint the whole screen');
+  body.appendChild(badge);
+  const exit = el('button', 'drawexit', '✕');
+  exit.setAttribute('aria-label', 'Close');
+  exit.addEventListener('click', () => { opts.onExit ? opts.onExit() : closeTool(); });
+  body.appendChild(exit);
+  const clearB = el('button', 'drawclear', 'Clear');
+  body.appendChild(clearB);
+  const ctx = cv.getContext('2d');
+  const CELL = 26, R = 24;
+  let cols = 0, rows = 0, cells = null, marked = 0, done = false;
+  function reset() {
+    cv.width = cv.offsetWidth; cv.height = cv.offsetHeight;
+    cols = Math.max(1, Math.ceil(cv.width / CELL));
+    rows = Math.max(1, Math.ceil(cv.height / CELL));
+    cells = new Uint8Array(cols * rows); marked = 0; done = false;
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, cv.width, cv.height);
+    update();
+  }
+  function update() {
+    const pct = Math.round(marked / (cols * rows) * 100);
+    if (pct >= 80 && !done) {
+      done = true;
+      badge.textContent = '✓ ' + pct + '% covered — test passed';
+      if (opts.onPass) opts.onPass();
+    } else if (!done) {
+      badge.textContent = pct + '% painted — cover the whole screen';
+    }
+  }
+  function stamp(x, y) {
+    const c0 = Math.max(0, Math.floor((x - R) / CELL)), c1 = Math.min(cols - 1, Math.floor((x + R) / CELL));
+    const r0 = Math.max(0, Math.floor((y - R) / CELL)), r1 = Math.min(rows - 1, Math.floor((y + R) / CELL));
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+      const dx = c * CELL + CELL / 2 - x, dy = r * CELL + CELL / 2 - y;
+      if (dx * dx + dy * dy <= R * R) {
+        const k = r * cols + c;
+        if (!cells[k]) { cells[k] = 1; marked++; }
+      }
+    }
+    update();
+  }
+  let drawing = false, lx = 0, ly = 0;
+  function pos(t) { const r = cv.getBoundingClientRect(); return [t.clientX - r.left, t.clientY - r.top]; }
+  function line(x, y) {
+    ctx.strokeStyle = ink; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+  }
+  cv.addEventListener('touchstart', e => {
+    e.preventDefault(); drawing = true;
+    const p = pos(e.changedTouches[0]); lx = p[0]; ly = p[1];
+    ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(lx, ly, 3.5, 0, 7); ctx.fill();
+    stamp(lx, ly);
+  }, { passive: false });
+  cv.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!drawing) return;
+    const p = pos(e.changedTouches[0]);
+    line(p[0], p[1]); stamp(p[0], p[1]); lx = p[0]; ly = p[1];
+  }, { passive: false });
+  const end = () => { drawing = false; };
+  cv.addEventListener('touchend', end); cv.addEventListener('touchcancel', end);
+  cv.addEventListener('mousedown', e => { drawing = true; lx = e.offsetX; ly = e.offsetY; stamp(lx, ly); });
+  cv.addEventListener('mousemove', e => { if (!drawing) return; line(e.offsetX, e.offsetY); stamp(e.offsetX, e.offsetY); lx = e.offsetX; ly = e.offsetY; });
+  cv.addEventListener('mouseup', end); cv.addEventListener('mouseleave', end);
+  clearB.addEventListener('click', reset);
+  window.addEventListener('resize', reset);
+  // wait a tick so layout is done before measuring
+  requestAnimationFrame(reset);
+  return () => window.removeEventListener('resize', reset);
+}
+/* register the Draw card */
+(function () {
+  const b = el('button', 'tool',
+    '<div class="ic">' + IC('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/>') + '</div><b>Draw</b><span>Paint the full screen</span>');
+  b.addEventListener('click', () => openTool('Draw test', toolDraw, true));
+  $('gridA').appendChild(b);
+})();
+</script>
+
+<style>
+.citrow{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:var(--bg);
+  border:1px solid var(--line); border-radius:12px; padding:13px 14px; margin:8px 0;
+  font-family:inherit; color:var(--ink); cursor:pointer; font-size:15px; }
+.citrow small{ display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+.citrow:active{ background:var(--soft); }
+.badge{ margin-left:auto; flex:none; font-size:12px; font-weight:700; padding:4px 12px; border-radius:20px; }
+.badge.pass{ background:#e6f4ea; color:#1a7f37; }
+.badge.fail{ background:#fdecea; color:#cf222e; }
+.badge.todo{ background:var(--soft); color:var(--muted); }
+@media (prefers-color-scheme: dark){
+  .badge.pass{ background:#12341f; color:#7ee2a0; }
+  .badge.fail{ background:#3d1414; color:#ff9d97; }
+}
+.citbar{ position:sticky; bottom:0; display:grid; grid-template-columns:1fr 1fr; gap:8px;
+  padding:12px 0 6px; background:var(--bg); }
+.citbar .btn.failbtn{ background:#cf222e; color:#fff; }
+.citbar .btn.passbtn{ background:#1a7f37; color:#fff; }
+.citsub{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.citsub h3{ margin:0; font-size:16px; flex:1; }
+.citstage{ position:relative; height:68vh; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+</style>
+<script>
+"use strict";
+/* ---------- CIT-only mock tests (browser-feasible) ---------- */
+function toolReceiver(body) {
+  body.appendChild(hint('Hold the phone to your ear like on a call, then play the tone. You should hear a faint sound from the earpiece slit.'));
+  let actx = null;
+  const pBtn = btn('Play earpiece tone', () => {
+    try {
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(actx.destination);
+      const t = actx.currentTime;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.06, t + 0.1);
+      g.gain.setValueAtTime(0.06, t + 2.4);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+      o.start(t); o.stop(t + 2.7);
+    } catch (e) { body.appendChild(errBox('Audio failed: ' + e.message)); }
+  });
+  body.appendChild(pBtn);
+  return () => { if (actx) actx.close().catch(() => {}); };
+}
+function toolWifi(body) {
+  body.appendChild(hint('Connection details. Open any website in your browser — if it loads, the radio is fine.'));
+  const c = navigator.connection || {};
+  body.appendChild(readout('Online', navigator.onLine ? 'Yes' : 'No'));
+  if (c.effectiveType) body.appendChild(readout('Network type', (c.type || 'unknown') + ' · ' + c.effectiveType.toUpperCase()));
+  if (c.downlink) body.appendChild(readout('Est. downlink', c.downlink + ' Mbps'));
+  if (c.rtt != null) body.appendChild(readout('Est. RTT', c.rtt + ' ms'));
+  return () => {};
+}
+function toolBluetooth(body) {
+  body.appendChild(hint('Checks Bluetooth radio availability. Pairing itself is done in system settings.'));
+  if ('bluetooth' in navigator)
+    body.appendChild(okBox('<b>Bluetooth API available.</b><br>Toggle Bluetooth in settings and pair a device to confirm the radio works.'));
+  else
+    body.appendChild(errBox('<b>Bluetooth not exposed to the browser.</b><br>Needs Chrome on Android. Check it in system settings instead.'));
+  return () => {};
+}
+function toolStorage(body) {
+  body.appendChild(hint('Internal storage reported by the browser.'));
+  const wrap = el('div'); body.appendChild(wrap);
+  wrap.appendChild(el('p', 'hint center', 'Reading…'));
+  (async () => {
+    wrap.innerHTML = '';
+    try {
+      const e = await navigator.storage.estimate();
+      const used = (e.usage / 1e9).toFixed(1), free = ((e.quota - e.usage) / 1e9).toFixed(1);
+      wrap.appendChild(readout('Used', used + ' GB'));
+      wrap.appendChild(readout('Free', free + ' GB'));
+      const m = el('div', 'meter', '<div style="width:' + Math.min(100, e.usage / e.quota * 100) + '%"></div>');
+      wrap.appendChild(m);
+    } catch (err) { wrap.appendChild(errBox('Storage info unavailable.')); }
+  })();
+  return () => {};
+}
+
+/* ---------- CIT factory test mode (Xiaomi-style) ---------- */
+const CIT_TESTS = [
+  { name:'Touch panel', desc:'Draw to cover the screen', run:(b, done) => toolDraw(b, { onExit: done, onPass: () => citAuto(0) }) },
+  { name:'Display', desc:'Colour & dead-pixel check', run:(b, done) => toolScreen(b, { onExit: done }) },
+  { name:'Speaker', desc:'Loudspeaker tone test', run:(b, done) => toolSpeaker(b) },
+  { name:'Receiver', desc:'Earpiece tone test', run:(b, done) => toolReceiver(b) },
+  { name:'Vibration', desc:'Motor patterns', run:(b, done) => toolVibration(b) },
+  { name:'Back camera', desc:'Rear camera preview', run:(b, done) => toolCamera(b, 'environment') },
+  { name:'Front camera', desc:'Selfie camera preview', run:(b, done) => toolCamera(b, 'user') },
+  { name:'Fingerprint sensor', desc:'Biometric hardware', run:(b, done) => toolBiometric(b) },
+  { name:'Light sensor', desc:'Ambient light level', run:(b, done) => toolLight(b) },
+  { name:'Accelerometer', desc:'Motion values', run:(b, done) => toolMotion(b) },
+  { name:'Gyroscope', desc:'Rotation rate', run:(b, done) => toolMotion(b) },
+  { name:'Magnetic sensor', desc:'Compass heading', run:(b, done) => toolCompass(b) },
+  { name:'Battery', desc:'Level & charging state', run:(b, done) => toolBattery(b) },
+  { name:'WiFi', desc:'Connection info', run:(b, done) => toolWifi(b) },
+  { name:'Bluetooth', desc:'Radio availability', run:(b, done) => toolBluetooth(b) },
+  { name:'Storage', desc:'Free space', run:(b, done) => toolStorage(b) },
+];
+const citStatus = new Array(CIT_TESTS.length).fill(null); // null | 'pass' | 'fail'
+function citAuto(i) { if (!citStatus[i]) citStatus[i] = 'pass'; }
+function toolCIT(body) {
+  let testCleanup = null;
+  function showList() {
+    if (testCleanup) { try { testCleanup(); } catch (e) {} testCleanup = null; }
+    body.innerHTML = '';
+    const p = citStatus.filter(s => s === 'pass').length, f = citStatus.filter(s => s === 'fail').length;
+    body.appendChild(hint('Xiaomi CIT-style factory test. Open each item, follow the check, then tap PASS or FAIL — just like the service menu.'));
+    body.appendChild(el('p', 'hint', '<b style="color:var(--ink)">' + p + ' passed</b> · <b style="color:var(--ink)">' + f + ' failed</b> · ' + (CIT_TESTS.length - p - f) + ' remaining'));
+    CIT_TESTS.forEach((t, i) => {
+      const st = citStatus[i];
+      const row = el('button', 'citrow',
+        '<div><b>' + (i + 1) + '. ' + t.name + '</b><small>' + t.desc + '</small></div>' +
+        '<span class="badge ' + (st || 'todo') + '">' + (st === 'pass' ? 'PASS' : st === 'fail' ? 'FAIL' : '—') + '</span>');
+      row.addEventListener('click', () => openCIT(i));
+      body.appendChild(row);
+    });
+    const rs = btn('Reset results', () => { citStatus.fill(null); showList(); }, true);
+    body.appendChild(rs);
+  }
+  function openCIT(i) {
+    body.innerHTML = '';
+    const sub = el('div', 'citsub',
+      '<button class="backbtn" id="citBack" aria-label="Back">←</button><h3>' + (i + 1) + '. ' + CIT_TESTS[i].name + '</h3>');
+    body.appendChild(sub);
+    sub.querySelector('#citBack').addEventListener('click', showList);
+    const stage = el('div', 'citstage');
+    body.appendChild(stage);
+    testCleanup = CIT_TESTS[i].run(stage, showList) || null;
+    const bar = el('div', 'citbar');
+    const fb = el('button', 'btn failbtn', '✕ FAIL');
+    const pb = el('button', 'btn passbtn', '✓ PASS');
+    fb.addEventListener('click', () => { citStatus[i] = 'fail'; showList(); });
+    pb.addEventListener('click', () => { citStatus[i] = 'pass'; showList(); });
+    bar.appendChild(fb); bar.appendChild(pb);
+    body.appendChild(bar);
+  }
+  showList();
+  return () => {
+    if (testCleanup) { try { testCleanup(); } catch (e) {} testCleanup = null; }
+  };
+}
+/* register the Factory test card */
+(function () {
+  const card = el('div', 'card');
+  card.innerHTML = '<h2>Factory test mode</h2><p class="sub">Xiaomi CIT-style hardware test sequence — open each test, then tap PASS or FAIL.</p>';
+  const b = btn('Open factory test');
+  b.addEventListener('click', () => openTool('Factory test', toolCIT, false));
+  card.appendChild(b);
+  const main = document.querySelector('main');
+  main.insertBefore(card, main.querySelector('.secttl'));
+})();
+</script>
