@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Checkup — Phone Diagnostics</title>
+<meta name="description" content="Test your phone's screen, speaker, microphone, camera, sensors and more. Free, on-device diagnostics.">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<style>
+:root{
+  --bg:#ffffff; --ink:#111111; --muted:#6b6b6b; --line:#e8e8e8; --soft:#f6f6f6;
+  --green:#1a7f37; --amber:#9a6700; --red:#cf222e; --radius:16px;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0d0d0d; --ink:#f2f2f2; --muted:#9a9a9a; --line:#262626; --soft:#171717; }
+}
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body{ margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Helvetica,Arial,sans-serif;
+  max-width:520px; margin:0 auto; min-height:100vh; }
+header{ padding:28px 20px 8px; display:flex; align-items:center; gap:14px; }
+header img{ width:52px; height:52px; border-radius:13px; }
+header h1{ margin:0; font-size:24px; font-weight:700; letter-spacing:-0.3px; }
+header p{ margin:3px 0 0; font-size:13px; color:var(--muted); }
+main{ padding:12px 16px 40px; }
+.card{ border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin:12px 0; background:var(--bg); }
+.card h2{ margin:0 0 4px; font-size:16px; font-weight:700; }
+.card .sub{ margin:0 0 12px; font-size:13px; color:var(--muted); }
+.btn{ display:block; width:100%; border:none; border-radius:12px; background:var(--ink); color:var(--bg);
+  font-size:15px; font-weight:700; padding:13px; cursor:pointer; font-family:inherit; }
+.btn:active{ opacity:0.85; }
+.btn.ghost{ background:var(--soft); color:var(--ink); border:1px solid var(--line); margin-top:8px; }
+.btn:disabled{ opacity:0.4; }
+.grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:4px; }
+.tool{ border:1px solid var(--line); border-radius:var(--radius); padding:14px 12px; background:var(--bg);
+  cursor:pointer; text-align:left; font-family:inherit; color:var(--ink); }
+.tool:active{ background:var(--soft); }
+.tool .ic{ width:40px; height:40px; border-radius:50%; background:var(--soft); display:flex;
+  align-items:center; justify-content:center; margin-bottom:10px; }
+.tool .ic svg{ width:22px; height:22px; }
+.tool b{ display:block; font-size:14px; font-weight:700; }
+.tool span{ display:block; font-size:12px; color:var(--muted); margin-top:2px; line-height:1.35; }
+.secttl{ font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin:22px 2px 4px; }
+.qrow{ display:flex; align-items:center; gap:10px; padding:9px 2px; border-top:1px solid var(--line); font-size:14px; }
+.qrow:first-of-type{ border-top:none; }
+.dot{ width:9px; height:9px; border-radius:50%; flex:none; }
+.dot.pass{ background:var(--green); } .dot.warn{ background:var(--amber); } .dot.fail{ background:var(--red); } .dot.idle{ background:var(--line); }
+.qrow .d{ margin-left:auto; font-size:12px; color:var(--muted); text-align:right; max-width:55%; }
+.score{ font-size:13px; color:var(--muted); margin:8px 2px 0; }
+.score b{ color:var(--ink); font-size:20px; }
+/* overlay */
+.overlay{ position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;
+  animation:up .22s ease; }
+.overlay.hidden{ display:none; }
+@keyframes up{ from{ transform:translateY(24px); opacity:0; } to{ transform:none; opacity:1; } }
+.sheethead{ display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--line); flex:none; }
+.sheethead h2{ margin:0; font-size:17px; font-weight:700; }
+.backbtn{ border:1px solid var(--line); background:var(--bg); color:var(--ink); border-radius:10px;
+  width:38px; height:38px; font-size:18px; cursor:pointer; font-family:inherit; flex:none; }
+.sheetbody{ flex:1; overflow-y:auto; padding:18px 16px 40px; }
+.sheetbody.full{ padding:0; overflow:hidden; }
+.hint{ font-size:14px; color:var(--muted); line-height:1.55; margin:0 0 14px; }
+.readout{ border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin:10px 0; font-size:14px; }
+.readout .k{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:0.6px; }
+.readout .v{ font-size:18px; font-weight:700; margin-top:2px; font-variant-numeric:tabular-nums; }
+.bigval{ font-size:34px; font-weight:700; text-align:center; margin:18px 0 4px; font-variant-numeric:tabular-nums; }
+.center{ text-align:center; }
+.meter{ height:10px; border-radius:6px; background:var(--soft); border:1px solid var(--line); overflow:hidden; margin:10px 0; }
+.meter > div{ height:100%; width:0%; background:var(--ink); border-radius:6px; transition:width .08s linear; }
+video{ width:100%; border-radius:12px; background:#000; max-height:52vh; }
+audio{ width:100%; margin-top:10px; }
+canvas.tcanvas{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+.eq{ display:flex; gap:6px; align-items:flex-end; justify-content:center; height:56px; margin:16px 0; }
+.eq i{ width:10px; background:var(--ink); border-radius:5px; height:20%; opacity:0.25; }
+.eq.on i{ animation:eq .7s ease-in-out infinite alternate; opacity:1; }
+.eq i:nth-child(2){ animation-delay:.15s; } .eq i:nth-child(3){ animation-delay:.3s; }
+.eq i:nth-child(4){ animation-delay:.45s; } .eq i:nth-child(5){ animation-delay:.6s; }
+@keyframes eq{ from{ height:15%; } to{ height:100%; } }
+.dial{ width:190px; height:190px; border:1px solid var(--line); border-radius:50%; margin:14px auto; position:relative; background:var(--bg); }
+.dial .needle{ position:absolute; inset:0; transition:transform .25s ease; }
+.dial .n{ position:absolute; top:8px; left:50%; transform:translateX(-50%); font-weight:800; font-size:15px; color:var(--red); }
+.foot{ text-align:center; font-size:12px; color:var(--muted); padding:0 24px; line-height:1.5; }
+.rowbtns{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.rowbtns .btn{ font-size:14px; padding:12px 6px; }
+a.dl{ display:inline-block; margin-top:10px; font-size:14px; font-weight:700; color:var(--ink); }
+.err{ border:1px solid var(--line); border-left:4px solid var(--red); border-radius:10px; padding:12px 14px; font-size:14px; margin:12px 0; }
+.okbox{ border:1px solid var(--line); border-left:4px solid var(--green); border-radius:10px; padding:12px 14px; font-size:14px; margin:12px 0; }
+</style>
+</head>
+<body>
+<header>
+  <img src="icons/icon-192.png" alt="Checkup icon">
+  <div><h1>Checkup</h1><p>Phone hardware diagnostics</p></div>
+</header>
+<main>
+  <div class="card">
+    <h2>Quick health check</h2>
+    <p class="sub">Runs the passive checks automatically — no tapping through tests.</p>
+    <button class="btn" id="quickBtn">Run quick check</button>
+    <div id="quickOut" style="margin-top:6px;"></div>
+    <div class="score" id="quickScore"></div>
+  </div>
+
+  <div class="secttl">Display &amp; input</div>
+  <div class="grid" id="gridA"></div>
+  <div class="secttl">Sound &amp; camera</div>
+  <div class="grid" id="gridB"></div>
+  <div class="secttl">Sensors &amp; radios</div>
+  <div class="grid" id="gridC"></div>
+  <div class="secttl">System</div>
+  <div class="grid" id="gridD"></div>
+
+  <p class="foot" style="margin-top:26px;">Every test runs on your device.<br>Nothing is recorded or uploaded anywhere.</p>
+</main>
+
+<div class="overlay hidden" id="overlay">
+  <div class="sheethead" id="sheetHead">
+    <button class="backbtn" id="backBtn" aria-label="Back">←</button>
+    <h2 id="toolTitle"></h2>
+  </div>
+  <div class="sheetbody" id="toolBody"></div>
+</div>
+
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const overlay = $('overlay'), toolBody = $('toolBody'), sheetHead = $('sheetHead');
+let cleanup = null;
+function openTool(title, render, fullscreen) {
+  if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
+  $('toolTitle').textContent = title;
+  sheetHead.style.display = fullscreen ? 'none' : '';
+  toolBody.className = 'sheetbody' + (fullscreen ? ' full' : '');
+  toolBody.innerHTML = '';
+  overlay.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  cleanup = render(toolBody) || null;
+}
+function closeTool() {
+  if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
+  overlay.classList.add('hidden');
+  document.body.style.overflow = '';
+}
+$('backBtn').addEventListener('click', closeTool);
+function hint(t) { return el('p', 'hint', t); }
+function readout(k, v, id) {
+  const d = el('div', 'readout', '<div class="k">' + k + '</div><div class="v"' + (id ? ' id="' + id + '"' : '') + '>' + v + '</div>');
+  return d;
+}
+function errBox(t) { return el('div', 'err', t); }
+function okBox(t) { return el('div', 'okbox', t); }
+function btn(label, fn, ghost) {
+  const b = el('button', 'btn' + (ghost ? ' ghost' : ''), label);
+  b.addEventListener('click', fn); return b;
+}
+function fmt(n, d) { return Number(n).toFixed(d == null ? 1 : d); }
+</script>
+
+<script>
+"use strict";
+/* ---------- tool registry ---------- */
+const IC = (paths) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>';
+const TOOLS = [
+ { id:'screen', grp:'gridA', name:'Screen', desc:'Dead pixels & colour test', run:'toolScreen', fs:true,
+   icon: IC('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6"/>') },
+ { id:'touch', grp:'gridA', name:'Touch', desc:'Multi-touch response test', run:'toolTouch', fs:true,
+   icon: IC('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>') },
+ { id:'speaker', grp:'gridB', name:'Speaker', desc:'Tones, sweep & channels', run:'toolSpeaker',
+   icon: IC('<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/>') },
+ { id:'mic', grp:'gridB', name:'Microphone', desc:'Record & play back', run:'toolMic',
+   icon: IC('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>') },
+ { id:'vibration', grp:'gridB', name:'Vibration', desc:'Motor & patterns', run:'toolVibration',
+   icon: IC('<rect x="8" y="3" width="8" height="18" rx="2"/><path d="M4 8c-1 2-1 6 0 8M20 8c1 2 1 6 0 8"/>') },
+ { id:'camera', grp:'gridB', name:'Camera', desc:'Front & back preview', run:'toolCamera',
+   icon: IC('<rect x="3" y="7" width="18" height="12" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M8 7l1.5-2.5h5L16 7"/>') },
+ { id:'flashlight', grp:'gridB', name:'Flashlight', desc:'LED torch toggle', run:'toolFlashlight',
+   icon: IC('<path d="M9 2h6v5l4 9a2 2 0 01-1.8 3H6.8A2 2 0 015 16l4-9V2z"/><path d="M10 2v5h4V2"/>') },
+ { id:'motion', grp:'gridC', name:'Motion', desc:'Accelerometer & gyroscope', run:'toolMotion',
+   icon: IC('<path d="M12 3v18M3 12h18"/><path d="M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/>') },
+ { id:'compass', grp:'gridC', name:'Compass', desc:'Heading & direction', run:'toolCompass',
+   icon: IC('<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>') },
+ { id:'gps', grp:'gridC', name:'GPS', desc:'Location & accuracy', run:'toolGPS',
+   icon: IC('<path d="M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>') },
+ { id:'nfc', grp:'gridC', name:'NFC', desc:'Contactless availability', run:'toolNFC',
+   icon: IC('<path d="M6 8.5a7 7 0 010 7M9.5 6a11 11 0 010 12M13 3.5a15 15 0 010 17"/>') },
+ { id:'light', grp:'gridC', name:'Light sensor', desc:'Ambient light level', run:'toolLight',
+   icon: IC('<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/>') },
+ { id:'battery', grp:'gridD', name:'Battery', desc:'Level & charging state', run:'toolBattery',
+   icon: IC('<rect x="2" y="8" width="17" height="9" rx="2"/><path d="M21 11v3"/>') },
+ { id:'network', grp:'gridD', name:'Network', desc:'Connection & speed test', run:'toolNetwork',
+   icon: IC('<path d="M2.5 9a15 15 0 0119 0M5.5 12.5a10 10 0 0113 0M8.6 16a5 5 0 016.8 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/>') },
+ { id:'biometric', grp:'gridD', name:'Fingerprint', desc:'Biometric hardware check', run:'toolBiometric',
+   icon: IC('<path d="M12 11a3 3 0 013 3c0 2.5-.5 5-1.5 7M9 14c0 3-.7 5-1.8 6.5M12 8a6 6 0 016 6c0 1.8-.2 3.5-.6 5M6.2 12.5A6 6 0 016 14c0 2.3-.4 4.3-1 6M12 5a9 9 0 019 9"/>') },
+ { id:'device', grp:'gridD', name:'Device info', desc:'Specs & capabilities', run:'toolDevice',
+   icon: IC('<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18.5h2"/>') },
+];
+function toolFn(name) {
+  return { toolScreen, toolTouch, toolSpeaker, toolMic, toolVibration, toolCamera,
+    toolFlashlight, toolMotion, toolCompass, toolGPS, toolNFC, toolLight,
+    toolBattery, toolNetwork, toolBiometric, toolDevice }[name];
+}
+TOOLS.forEach(t => {
+  const b = el('button', 'tool', '<div class="ic">' + t.icon + '</div><b>' + t.name + '</b><span>' + t.desc + '</span>');
+  b.addEventListener('click', () => openTool(t.name, toolFn(t.run), t.fs));
+  $(t.grp).appendChild(b);
+});
+
+/* ---------- quick health check ---------- */
+const QUICK = [
+ { name:'Battery', run: async () => navigator.getBattery
+   ? { s:'pass', d:'API available' } : { s:'fail', d:'Not supported' } },
+ { name:'Network', run: async () => {
+   const c = navigator.connection || {};
+   return navigator.onLine ? { s:'pass', d:(c.effectiveType || 'online').toUpperCase() } : { s:'fail', d:'Offline' }; } },
+ { name:'Vibration', run: async () => 'vibrate' in navigator
+   ? { s:'pass', d:'Motor API present' } : { s:'fail', d:'Not supported' } },
+ { name:'Motion sensors', run: async () =>
+   ('DeviceMotionEvent' in window || 'DeviceOrientationEvent' in window)
+   ? { s:'pass', d:'Events available' } : { s:'warn', d:'Not detected' } },
+ { name:'Touch screen', run: async () => {
+   const n = navigator.maxTouchPoints || 0;
+   return n > 1 ? { s:'pass', d:n + '-point touch' } : n === 1 ? { s:'warn', d:'Single touch' } : { s:'fail', d:'No touch' }; } },
+ { name:'Fingerprint / face', run: async () => {
+   try {
+     if (window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())
+       return { s:'pass', d:'Biometric available' };
+   } catch (e) {}
+   return { s:'warn', d:'Not detected' }; } },
+ { name:'NFC', run: async () => 'NDEFReader' in window
+   ? { s:'pass', d:'Reader available' } : { s:'warn', d:'Not detected' } },
+ { name:'Storage', run: async () => {
+   try {
+     const e = await navigator.storage.estimate();
+     const gb = ((e.quota - e.usage) / 1e9).toFixed(1);
+     return { s:'pass', d: gb + ' GB free' };
+   } catch (err) { return { s:'warn', d:'Unknown' }; } } },
+];
+$('quickBtn').addEventListener('click', async () => {
+  const out = $('quickOut'), score = $('quickScore');
+  out.innerHTML = ''; score.innerHTML = '';
+  $('quickBtn').disabled = true;
+  let pass = 0;
+  for (const q of QUICK) {
+    const row = el('div', 'qrow', '<span class="dot idle"></span><span>' + q.name + '</span><span class="d">…</span>');
+    out.appendChild(row);
+    let r;
+    try { r = await q.run(); } catch (e) { r = { s:'fail', d:'Error' }; }
+    if (r.s === 'pass') pass++;
+    row.querySelector('.dot').className = 'dot ' + r.s;
+    row.querySelector('.d').textContent = r.d;
+  }
+  score.innerHTML = '<b>' + pass + '/' + QUICK.length + '</b> checks passed';
+  $('quickBtn').disabled = false;
+  $('quickBtn').textContent = 'Run again';
+});
+</script>
+
+<script>
+"use strict";
+/* ================= SCREEN ================= */
+function toolScreen(body) {
+  const colors = [
+    ['#ffffff', 'White — look for dark spots'],
+    ['#000000', 'Black — look for bright spots'],
+    ['#ff0000', 'Red'],
+    ['#00c853', 'Green'],
+    ['#2962ff', 'Blue'],
+  ];
+  let i = 0;
+  const wrap = el('div');
+  wrap.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:background .2s;';
+  const label = el('div', 'center');
+  label.style.cssText = 'font-size:14px;padding:10px 18px;border-radius:20px;background:rgba(128,128,128,.25);color:#fff;mix-blend-mode:difference;';
+  const count = el('div', 'center');
+  count.style.cssText = 'margin-top:8px;font-size:12px;color:#fff;mix-blend-mode:difference;opacity:.7;';
+  const exit = el('button', '', '✕');
+  exit.style.cssText = 'position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:50%;border:none;background:rgba(128,128,128,.35);color:#fff;font-size:18px;mix-blend-mode:difference;';
+  exit.addEventListener('click', e => { e.stopPropagation(); closeTool(); });
+  function draw() {
+    wrap.style.background = colors[i][0];
+    label.textContent = colors[i][1];
+    count.textContent = (i + 1) + ' / ' + colors.length + ' — tap to change';
+  }
+  wrap.appendChild(label); wrap.appendChild(count); wrap.appendChild(exit);
+  wrap.addEventListener('click', () => { i = (i + 1) % colors.length; draw(); });
+  body.appendChild(wrap); draw();
+  return () => {};
+}
+
+/* ================= TOUCH ================= */
+function toolTouch(body) {
+  body.appendChild(hint('Touch the screen with one or more fingers. Each touch draws a circle — lift and try pinch or multi-finger taps to check every zone.'));
+  const n = readout('Active touches', '0', 'tN');
+  body.appendChild(n);
+  const cv = el('canvas', 'tcanvas');
+  body.appendChild(cv);
+  const clear = btn('Clear', () => { ctx.clearRect(0, 0, cv.width, cv.height); }, true);
+  clear.style.marginTop = '10px'; body.appendChild(clear);
+  const ctx = cv.getContext('2d');
+  function size() { cv.width = cv.offsetWidth; cv.height = cv.offsetHeight; }
+  size(); window.addEventListener('resize', size);
+  const pts = {};
+  function drawAll() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    Object.keys(pts).forEach((id, k) => {
+      const p = pts[id];
+      ctx.beginPath(); ctx.arc(p.x, p.y, 34, 0, 7);
+      ctx.strokeStyle = 'hsl(' + (k * 67 % 360) + ',70%,50%)'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fillStyle = '#111'; ctx.fill();
+    });
+    $('tN').textContent = Object.keys(pts).length;
+  }
+  function pos(t) { const r = cv.getBoundingClientRect(); return { x: t.clientX - r.left, y: t.clientY - r.top }; }
+  cv.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) pts[t.identifier] = pos(t); drawAll(); }, { passive: false });
+  cv.addEventListener('touchmove', e => { e.preventDefault(); for (const t of e.changedTouches) pts[t.identifier] = pos(t); drawAll(); }, { passive: false });
+  const end = e => { for (const t of e.changedTouches) delete pts[t.identifier]; drawAll(); };
+  cv.addEventListener('touchend', end); cv.addEventListener('touchcancel', end);
+  return () => window.removeEventListener('resize', size);
+}
+
+/* ================= SPEAKER ================= */
+function toolSpeaker(body) {
+  body.appendChild(hint('Play each test. For the channel tests, sound should come from only one side (use earphones for a clear result).'));
+  const eq = el('div', 'eq', '<i></i><i></i><i></i><i></i><i></i>');
+  body.appendChild(eq);
+  const status = el('p', 'hint center', 'Idle');
+  body.appendChild(status);
+  let actx = null, nodes = [];
+  function ctx() {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+  function stop() {
+    nodes.forEach(n => { try { n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} });
+    nodes = []; eq.classList.remove('on'); status.textContent = 'Idle';
+  }
+  function play(label, build, dur) {
+    stop();
+    const a = ctx(), o = a.createOscillator(), g = a.createGain(), p = a.createStereoPanner ? a.createStereoPanner() : null;
+    build(o, p);
+    o.connect(g); (p ? (g.connect(p), p.connect(a.destination)) : g.connect(a.destination));
+    const t = a.currentTime;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.5, t + 0.05);
+    g.gain.setValueAtTime(0.5, t + dur - 0.15);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.start(t); o.stop(t + dur + 0.05);
+    nodes = [o]; eq.classList.add('on'); status.textContent = 'Playing: ' + label;
+    setTimeout(() => { if (nodes.includes(o)) stop(); }, (dur + 0.2) * 1000);
+  }
+  const grid = el('div', 'rowbtns');
+  grid.appendChild(btn('Tone 440 Hz', () => play('440 Hz tone', o => o.frequency.value = 440, 2)));
+  grid.appendChild(btn('Sweep', () => play('frequency sweep 100 Hz → 8 kHz', o => {
+    o.frequency.setValueAtTime(100, actx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(8000, actx.currentTime + 4);
+  }, 4)));
+  grid.appendChild(btn('Left channel', () => play('left channel only', (o, p) => { o.frequency.value = 440; if (p) p.pan.value = -1; }, 2)));
+  grid.appendChild(btn('Right channel', () => play('right channel only', (o, p) => { o.frequency.value = 440; if (p) p.pan.value = 1; }, 2)));
+  body.appendChild(grid);
+  body.appendChild(btn('Stop', stop, true));
+  return stop;
+}
+
+/* ================= MICROPHONE ================= */
+function toolMic(body) {
+  body.appendChild(hint('Allow microphone access, then speak. The bar shows live input level. Record a 5-second clip and play it back to check quality.'));
+  const wrap = el('div'); body.appendChild(wrap);
+  const startBtn = btn('Start microphone test', async () => {
+    startBtn.disabled = true;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      wrap.innerHTML = '';
+      wrap.appendChild(el('p', 'hint center', 'Speak now — watch the level'));
+      const meter = el('div', 'meter', '<div id="micBar"></div>');
+      wrap.appendChild(meter);
+      const actx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = actx.createMediaStreamSource(stream);
+      const an = actx.createAnalyser(); an.fftSize = 512;
+      src.connect(an);
+      const data = new Uint8Array(an.frequencyBinCount);
+      let raf, rec = null, chunks = [];
+      const bar = $('micBar');
+      (function loop() {
+        an.getByteFrequencyData(data);
+        let s = 0; for (let i = 0; i < data.length; i++) s += data[i];
+        bar.style.width = Math.min(100, s / data.length / 2.2) + '%';
+        raf = requestAnimationFrame(loop);
+      })();
+      const recBtn = btn('● Record 5 seconds', () => {
+        recBtn.disabled = true;
+        chunks = [];
+        rec = new MediaRecorder(stream);
+        rec.ondataavailable = e => chunks.push(e.data);
+        rec.onstop = () => {
+          const url = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
+          wrap.appendChild(el('p', 'hint center', 'Playback — does it sound clear?'));
+          const a = el('audio'); a.controls = true; a.src = url; wrap.appendChild(a);
+          const d = el('a', 'dl', 'Download recording'); d.href = url; d.download = 'mic-test.webm';
+          wrap.appendChild(el('div', 'center')).appendChild(d);
+          recBtn.disabled = false; recBtn.textContent = '● Record again';
+        };
+        rec.start();
+        recBtn.textContent = 'Recording…';
+        setTimeout(() => { if (rec && rec.state === 'recording') rec.stop(); }, 5000);
+      });
+      wrap.appendChild(recBtn);
+      const stopBtn = btn('Stop', () => {
+        cancelAnimationFrame(raf);
+        if (rec && rec.state === 'recording') rec.stop();
+        stream.getTracks().forEach(t => t.stop()); actx.close();
+        wrap.innerHTML = ''; startBtn.disabled = false;
+      }, true);
+      wrap.appendChild(stopBtn);
+    } catch (e) {
+      wrap.appendChild(errBox('Microphone unavailable: ' + (e.name === 'NotAllowedError' ? 'permission denied. Allow mic access and try again.' : e.message)));
+      startBtn.disabled = false;
+    }
+  });
+  body.appendChild(startBtn);
+  return () => {};
+}
+
+/* ================= VIBRATION ================= */
+function toolVibration(body) {
+  body.appendChild(hint('Feel for each pattern. If nothing happens, the motor may be off or unsupported.'));
+  if (!('vibrate' in navigator)) {
+    body.appendChild(errBox('Vibration API not supported on this device/browser.'));
+    return () => {};
+  }
+  const ok = p => {
+    const r = navigator.vibrate(p);
+    body.appendChild(okBox(r ? 'Pattern sent — did you feel it?' : 'Vibration request was blocked.'));
+  };
+  const g = el('div', 'rowbtns');
+  g.appendChild(btn('Short buzz', () => ok(200)));
+  g.appendChild(btn('Long buzz', () => ok([600])));
+  g.appendChild(btn('Pattern', () => ok([200, 120, 200, 120, 400])));
+  g.appendChild(btn('SOS ···−−−···', () => ok([120, 80, 120, 80, 120, 200, 400, 200, 400, 200, 400, 200, 120, 80, 120, 80, 120])));
+  body.appendChild(g);
+  body.appendChild(btn('Stop', () => navigator.vibrate(0), true));
+  return () => navigator.vibrate(0);
+}
+</script>
+
+<script>
+"use strict";
+/* ================= CAMERA ================= */
+function toolCamera(body) {
+  body.appendChild(hint('Preview each camera. Capture a photo to check focus and colour.'));
+  const wrap = el('div'); body.appendChild(wrap);
+  let stream = null, facing = 'environment';
+  const startBtn = btn('Start camera', start);
+  body.appendChild(startBtn);
+  async function start() {
+    stop();
+    startBtn.disabled = true;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: false });
+      wrap.innerHTML = '';
+      const v = el('video'); v.srcObject = stream; v.playsInline = true; v.muted = true;
+      v.play(); wrap.appendChild(v);
+      const g = el('div', 'rowbtns'); g.style.marginTop = '10px';
+      g.appendChild(btn(facing === 'environment' ? 'Switch to front' : 'Switch to back', () => {
+        facing = facing === 'environment' ? 'user' : 'environment'; start();
+      }));
+      g.appendChild(btn('Capture photo', () => {
+        const c = document.createElement('canvas');
+        c.width = v.videoWidth; c.height = v.videoHeight;
+        c.getContext('2d').drawImage(v, 0, 0);
+        const url = c.toDataURL('image/jpeg', 0.85);
+        const img = el('img'); img.src = url;
+        img.style.cssText = 'width:100%;border-radius:12px;margin-top:10px;';
+        wrap.appendChild(img);
+        const d = el('a', 'dl', 'Download photo'); d.href = url; d.download = 'camera-test.jpg';
+        wrap.appendChild(el('div', 'center')).appendChild(d);
+      }));
+      wrap.appendChild(g);
+    } catch (e) {
+      wrap.appendChild(errBox('Camera unavailable: ' + (e.name === 'NotAllowedError' ? 'permission denied. Allow camera access and try again.' : e.message)));
+    }
+    startBtn.disabled = false;
+    startBtn.textContent = 'Restart camera';
+  }
+  function stop() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } }
+  return stop;
+}
+
+/* ================= FLASHLIGHT ================= */
+function toolFlashlight(body) {
+  body.appendChild(hint('Toggles the rear LED torch. Works on most Android phones via Chrome.'));
+  const wrap = el('div'); body.appendChild(wrap);
+  let stream = null, track = null, on = false;
+  const tBtn = btn('Turn torch on', toggle);
+  tBtn.disabled = true; body.appendChild(tBtn);
+  const big = el('div', 'bigval', '○');
+  body.appendChild(big);
+  (async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      track = stream.getVideoTracks()[0];
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if (!caps.torch) throw new Error('Torch not available on this camera.');
+      tBtn.disabled = false;
+    } catch (e) {
+      wrap.appendChild(errBox('Flashlight unavailable: ' + e.message));
+    }
+  })();
+  async function toggle() {
+    try {
+      on = !on;
+      await track.applyConstraints({ advanced: [{ torch: on }] });
+      tBtn.textContent = on ? 'Turn torch off' : 'Turn torch on';
+      big.textContent = on ? '●' : '○';
+    } catch (e) { wrap.appendChild(errBox('Could not toggle torch: ' + e.message)); }
+  }
+  return () => {
+    if (track && on) track.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
+    if (stream) stream.getTracks().forEach(t => t.stop());
+  };
+}
+
+/* ================= MOTION ================= */
+function toolMotion(body) {
+  body.appendChild(hint('Move and tilt your phone. Values should respond smoothly — frozen or zero readings mean a faulty sensor.'));
+  const enBtn = btn('Enable sensors', enable);
+  body.appendChild(enBtn);
+  const wrap = el('div'); body.appendChild(wrap);
+  let got = false, timer = null;
+  const rA = readout('Acceleration (incl. gravity)', 'x — · y — · z —', 'mA');
+  const rR = readout('Rotation rate', 'α — · β — · γ —', 'mR');
+  const rO = readout('Orientation', 'α — · β — · γ —', 'mO');
+  async function enable() {
+    enBtn.disabled = true;
+    try {
+      if (typeof DeviceMotionEvent !== 'undefined' && DeviceMotionEvent.requestPermission)
+        await DeviceMotionEvent.requestPermission();
+      if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission)
+        await DeviceOrientationEvent.requestPermission();
+    } catch (e) { wrap.appendChild(errBox('Sensor permission denied.')); enBtn.disabled = false; return; }
+    wrap.appendChild(rA); wrap.appendChild(rR); wrap.appendChild(rO);
+    window.addEventListener('devicemotion', onM);
+    window.addEventListener('deviceorientation', onO);
+    timer = setTimeout(() => {
+      if (!got) wrap.appendChild(errBox('No sensor data received — the sensor may be missing or blocked.'));
+    }, 4000);
+  }
+  function onM(e) {
+    got = true;
+    const a = e.accelerationIncludingGravity;
+    if (a) $('mA').textContent = 'x ' + fmt(a.x) + ' · y ' + fmt(a.y) + ' · z ' + fmt(a.z) + ' m/s²';
+    const r = e.rotationRate;
+    if (r && (r.alpha != null)) $('mR').textContent = 'α ' + fmt(r.alpha) + ' · β ' + fmt(r.beta) + ' · γ ' + fmt(r.gamma) + ' °/s';
+  }
+  function onO(e) {
+    got = true;
+    if (e.alpha != null) $('mO').textContent = 'α ' + fmt(e.alpha) + '° · β ' + fmt(e.beta) + '° · γ ' + fmt(e.gamma) + '°';
+  }
+  return () => {
+    clearTimeout(timer);
+    window.removeEventListener('devicemotion', onM);
+    window.removeEventListener('deviceorientation', onO);
+  };
+}
+
+/* ================= COMPASS ================= */
+function toolCompass(body) {
+  body.appendChild(hint('Hold the phone flat and rotate. The needle should track smoothly.'));
+  const enBtn = btn('Enable compass', enable);
+  body.appendChild(enBtn);
+  const wrap = el('div'); body.appendChild(wrap);
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  let timer = null, got = false;
+  async function enable() {
+    enBtn.disabled = true;
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission)
+        await DeviceOrientationEvent.requestPermission();
+    } catch (e) { wrap.appendChild(errBox('Permission denied.')); enBtn.disabled = false; return; }
+    const dial = el('div', 'dial',
+      '<div class="n">N</div><div class="needle" id="needle">' +
+      '<svg viewBox="0 0 190 190" width="190" height="190"><path d="M95 30 L104 100 L95 92 L86 100 Z" fill="#cf222e"/><path d="M95 160 L104 100 L95 108 L86 100 Z" fill="#888"/></svg></div>');
+    const big = el('div', 'bigval', '—°');
+    big.id = 'cDeg';
+    const sub = el('p', 'hint center', '—');
+    sub.id = 'cDir';
+    wrap.appendChild(dial); wrap.appendChild(big); wrap.appendChild(sub);
+    window.addEventListener('deviceorientation', onO, true);
+    timer = setTimeout(() => { if (!got) wrap.appendChild(errBox('No heading data — compass may be unavailable.')); }, 4000);
+  }
+  function onO(e) {
+    let h = null;
+    if (e.webkitCompassHeading != null) h = e.webkitCompassHeading;
+    else if (e.alpha != null && e.absolute !== false) h = (360 - e.alpha) % 360;
+    if (h == null) return;
+    got = true;
+    $('needle').style.transform = 'rotate(' + h + 'deg)';
+    $('cDeg').textContent = Math.round(h) + '°';
+    $('cDir').textContent = dirs[Math.round(h / 45) % 8];
+  }
+  return () => { clearTimeout(timer); window.removeEventListener('deviceorientation', onO, true); };
+}
+
+/* ================= GPS ================= */
+function toolGPS(body) {
+  body.appendChild(hint('Uses your location once to check the GPS. Accuracy under ~20 m outdoors is good.'));
+  const wrap = el('div'); body.appendChild(wrap);
+  const locBtn = btn('Find my location', () => {
+    locBtn.disabled = true;
+    wrap.innerHTML = '';
+    wrap.appendChild(el('p', 'hint center', 'Locating…'));
+    if (!('geolocation' in navigator)) {
+      wrap.innerHTML = ''; wrap.appendChild(errBox('Geolocation not supported.')); locBtn.disabled = false; return;
+    }
+    navigator.geolocation.getCurrentPosition(pos => {
+      const la = pos.coords.latitude.toFixed(6), lo = pos.coords.longitude.toFixed(6);
+      wrap.innerHTML = '';
+      wrap.appendChild(readout('Coordinates', la + ', ' + lo));
+      wrap.appendChild(readout('Accuracy', '± ' + Math.round(pos.coords.accuracy) + ' m'));
+      if (pos.coords.altitude != null) wrap.appendChild(readout('Altitude', Math.round(pos.coords.altitude) + ' m'));
+      const a = el('a', 'dl', 'Open in map');
+      a.href = 'https://www.openstreetmap.org/?mlat=' + la + '&mlon=' + lo + '#map=16/' + la + '/' + lo;
+      a.target = '_blank'; a.rel = 'noopener';
+      wrap.appendChild(el('div', 'center')).appendChild(a);
+      locBtn.disabled = false;
+    }, e => {
+      wrap.innerHTML = '';
+      const m = { 1: 'Location permission denied.', 2: 'Position unavailable — GPS may be off.', 3: 'Timed out — try outdoors.' }[e.code] || e.message;
+      wrap.appendChild(errBox(m));
+      locBtn.disabled = false;
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  });
+  body.appendChild(locBtn);
+  return () => {};
+}
+
+/* ================= NFC ================= */
+function toolNFC(body) {
+  body.appendChild(hint('Checks whether this browser exposes NFC reading. Actual tag reading needs Chrome on Android.'));
+  if ('NDEFReader' in window) {
+    body.appendChild(okBox('<b>NFC reader available.</b><br>Hold a tag near the phone in a supported app to test a real scan.'));
+  } else {
+    body.appendChild(errBox('<b>NFC not detected.</b><br>Either the phone lacks NFC or this browser does not expose it (needs Chrome on Android).'));
+  }
+  return () => {};
+}
+
+/* ================= LIGHT SENSOR ================= */
+function toolLight(body) {
+  body.appendChild(hint('Shows live ambient light in lux. Cover the top of the phone — the value should drop.'));
+  const wrap = el('div'); body.appendChild(wrap);
+  const big = el('div', 'bigval', '—');
+  const sub = el('p', 'hint center', 'lux');
+  let sensor = null;
+  (async () => {
+    try {
+      if (!('AmbientLightSensor' in window)) throw new Error('AmbientLightSensor not available in this browser.');
+      try {
+        const st = await navigator.permissions.query({ name: 'ambient-light-sensor' });
+        if (st.state === 'denied') throw new Error('Permission denied.');
+      } catch (e) { if (e.message === 'Permission denied.') throw e; }
+      sensor = new AmbientLightSensor();
+      sensor.addEventListener('reading', () => {
+        big.textContent = Math.round(sensor.illuminance);
+        let w = sensor.illuminance < 10 ? 'Dark' : sensor.illuminance < 100 ? 'Dim indoor' : sensor.illuminance < 1000 ? 'Bright indoor' : 'Daylight';
+        sub.textContent = 'lux — ' + w;
+      });
+      sensor.addEventListener('error', e => { wrap.appendChild(errBox('Sensor error: ' + (e.error ? e.error.name : 'unknown'))); });
+      wrap.appendChild(big); wrap.appendChild(sub);
+      sensor.start();
+    } catch (e) {
+      wrap.appendChild(errBox('Light sensor unavailable: ' + e.message + '<br><br>This needs Chrome on Android with a light sensor.'));
+    }
+  })();
+  return () => { if (sensor) { try { sensor.stop(); } catch (e) {} } };
+}
+</script>
+
+<script>
+"use strict";
+/* ================= BATTERY ================= */
+function toolBattery(body) {
+  body.appendChild(hint('Live battery state. Charge or unplug the phone and watch it update.'));
+  const wrap = el('div'); body.appendChild(wrap);
+  let bat = null;
+  function draw() {
+    wrap.innerHTML = '';
+    const lvl = Math.round(bat.level * 100);
+    wrap.appendChild(el('div', 'bigval', lvl + '%'));
+    const m = el('div', 'meter', '<div style="width:' + lvl + '%"></div>');
+    wrap.appendChild(m);
+    wrap.appendChild(readout('Status', bat.charging ? 'Charging ⚡' : 'Discharging'));
+    if (bat.charging && bat.chargingTime !== Infinity)
+      wrap.appendChild(readout('Full in', Math.round(bat.chargingTime / 60) + ' min'));
+    if (!bat.charging && bat.dischargingTime !== Infinity)
+      wrap.appendChild(readout('Empty in', Math.round(bat.dischargingTime / 3600 * 10) / 10 + ' h'));
+  }
+  (async () => {
+    if (!navigator.getBattery) { wrap.appendChild(errBox('Battery API not supported on this device/browser.')); return; }
+    bat = await navigator.getBattery();
+    draw();
+    bat.addEventListener('levelchange', draw);
+    bat.addEventListener('chargingchange', draw);
+  })();
+  return () => { if (bat) { bat.removeEventListener('levelchange', draw); bat.removeEventListener('chargingchange', draw); } };
+}
+
+/* ================= NETWORK ================= */
+function toolNetwork(body) {
+  body.appendChild(hint('Connection details plus a real download speed test.'));
+  const c = navigator.connection || {};
+  body.appendChild(readout('Online', navigator.onLine ? 'Yes' : 'No'));
+  if (c.effectiveType) body.appendChild(readout('Type', (c.type || '—') + ' · ' + c.effectiveType.toUpperCase()));
+  if (c.downlink) body.appendChild(readout('Est. downlink', c.downlink + ' Mbps'));
+  if (c.rtt != null) body.appendChild(readout('Est. RTT', c.rtt + ' ms'));
+  if (c.saveData) body.appendChild(readout('Data saver', 'On'));
+  const wrap = el('div'); body.appendChild(wrap);
+  const big = el('div', 'bigval', '—');
+  const sub = el('p', 'hint center', 'Tap start to measure download speed');
+  wrap.appendChild(big); wrap.appendChild(sub);
+  const meter = el('div', 'meter', '<div id="spBar"></div>');
+  wrap.appendChild(meter);
+  let ctrl = null;
+  const startBtn = btn('Start speed test', async () => {
+    startBtn.disabled = true;
+    ctrl = new AbortController();
+    const BYTES = 8000000;
+    const url = 'https://speed.cloudflare.com/__down?bytes=' + BYTES + '&t=' + Date.now();
+    big.textContent = '…'; sub.textContent = 'Downloading 8 MB…';
+    try {
+      const t0 = performance.now();
+      const res = await fetch(url, { signal: ctrl.signal });
+      const reader = res.body.getReader();
+      let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        got += value.length;
+        $('spBar').style.width = Math.min(100, got / BYTES * 100) + '%';
+        const el1 = (performance.now() - t0) / 1000;
+        if (el1 > 0.5) big.textContent = (got * 8 / el1 / 1e6).toFixed(1);
+      }
+      const secs = (performance.now() - t0) / 1000;
+      const mbps = got * 8 / secs / 1e6;
+      big.textContent = mbps.toFixed(1) + ' Mbps';
+      sub.textContent = (got / 1e6).toFixed(1) + ' MB in ' + secs.toFixed(1) + ' s';
+      $('spBar').style.width = '100%';
+    } catch (e) {
+      if (e.name !== 'AbortError') { big.textContent = '—'; sub.textContent = 'Test failed: ' + e.message; }
+      else { big.textContent = '—'; sub.textContent = 'Cancelled'; }
+    }
+    startBtn.disabled = false; startBtn.textContent = 'Run again';
+  });
+  wrap.appendChild(startBtn);
+  wrap.appendChild(btn('Cancel', () => { if (ctrl) ctrl.abort(); }, true));
+  return () => { if (ctrl) ctrl.abort(); };
+}
+
+/* ================= BIOMETRIC ================= */
+function toolBiometric(body) {
+  body.appendChild(hint('Checks for fingerprint / face hardware via the WebAuthn platform authenticator.'));
+  const wrap = el('div'); body.appendChild(wrap);
+  wrap.appendChild(el('p', 'hint center', 'Checking…'));
+  (async () => {
+    wrap.innerHTML = '';
+    try {
+      const ok = window.PublicKeyCredential &&
+        await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      if (ok) wrap.appendChild(okBox('<b>Biometric hardware available.</b><br>Apps can use your fingerprint or face to unlock.'));
+      else wrap.appendChild(errBox('<b>No biometric authenticator detected.</b><br>Either the phone lacks it or it is not set up.'));
+    } catch (e) {
+      wrap.appendChild(errBox('Check failed: ' + e.message));
+    }
+  })();
+  return () => {};
+}
+
+/* ================= DEVICE INFO ================= */
+function toolDevice(body) {
+  body.appendChild(hint('Read-only specs reported by the browser.'));
+  const rows = [];
+  const ua = navigator.userAgent;
+  rows.push(['Browser', (ua.match(/(Chrome|Firefox|SamsungBrowser|Edg|Safari)\/[\d.]+/) || ['—'])[0]]);
+  rows.push(['Platform', navigator.platform || '—']);
+  rows.push(['Screen', screen.width + ' × ' + screen.height + ' px']);
+  rows.push(['Pixel ratio', (window.devicePixelRatio || 1) + '×']);
+  rows.push(['CPU cores', navigator.hardwareConcurrency || '—']);
+  rows.push(['Memory', navigator.deviceMemory ? '≈ ' + navigator.deviceMemory + ' GB' : '—']);
+  rows.push(['Touch points', navigator.maxTouchPoints || 0]);
+  rows.push(['Language', navigator.language || '—']);
+  try { rows.push(['Timezone', Intl.DateTimeFormat().resolvedOptions().timeZone || '—']); } catch (e) {}
+  rows.push(['Online', navigator.onLine ? 'Yes' : 'No']);
+  try {
+    const c = navigator.connection || {};
+    if (c.effectiveType) rows.push(['Connection', c.effectiveType.toUpperCase()]);
+  } catch (e) {}
+  rows.forEach(r => body.appendChild(readout(r[0], String(r[1]))));
+  return () => {};
+}
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
