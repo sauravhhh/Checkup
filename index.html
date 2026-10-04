@@ -140,6 +140,12 @@ function openTool(title, render, fullscreen) {
   overlay.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
   cleanup = render(toolBody) || null;
+  if (!fullscreen) {
+    const backHome = el('button', 'btn ghost', '\u2039 Back to tests');
+    backHome.style.marginTop = '18px';
+    backHome.addEventListener('click', closeTool);
+    toolBody.appendChild(backHome);
+  }
 }
 function closeTool() {
   if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
@@ -295,32 +301,44 @@ function toolScreen(body, opts) {
 
 /* ================= TOUCH ================= */
 function toolTouch(body) {
-  body.appendChild(hint('Touch the screen with one or more fingers. Each touch draws a circle — lift and try pinch or multi-finger taps to check every zone.'));
-  const n = readout('Active touches', '0', 'tN');
-  body.appendChild(n);
-  const cv = el('canvas', 'tcanvas');
+  const cv = el('canvas');
+  cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;touch-action:none;';
   body.appendChild(cv);
-  const clear = btn('Clear', () => { ctx.clearRect(0, 0, cv.width, cv.height); }, true);
-  clear.style.marginTop = '10px'; body.appendChild(clear);
+  const badge = el('div', 'drawbadge', 'Tap with multiple fingers to test');
+  body.appendChild(badge);
+  const exit = el('button', 'drawexit', '\u2715');
+  exit.setAttribute('aria-label', 'Close');
+  exit.addEventListener('click', () => closeTool());
+  body.appendChild(exit);
+  const clearB = el('button', 'drawclear', 'Clear');
+  body.appendChild(clearB);
   const ctx = cv.getContext('2d');
-  function size() { cv.width = cv.offsetWidth; cv.height = cv.offsetHeight; }
-  size(); window.addEventListener('resize', size);
+  const bgc = () => getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#fff';
   const pts = {};
+  function size() {
+    cv.width = cv.offsetWidth; cv.height = cv.offsetHeight;
+    drawAll();
+  }
   function drawAll() {
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    Object.keys(pts).forEach((id, k) => {
+    ctx.fillStyle = bgc(); ctx.fillRect(0, 0, cv.width, cv.height);
+    const ids = Object.keys(pts);
+    ids.forEach((id, k) => {
       const p = pts[id];
       ctx.beginPath(); ctx.arc(p.x, p.y, 34, 0, 7);
       ctx.strokeStyle = 'hsl(' + (k * 67 % 360) + ',70%,50%)'; ctx.lineWidth = 3; ctx.stroke();
       ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fillStyle = '#111'; ctx.fill();
     });
-    $('tN').textContent = Object.keys(pts).length;
+    const n = ids.length;
+    badge.textContent = n === 0 ? 'Tap with multiple fingers to test' : n + (n === 1 ? ' touch' : ' touches') + ' detected';
   }
   function pos(t) { const r = cv.getBoundingClientRect(); return { x: t.clientX - r.left, y: t.clientY - r.top }; }
   cv.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) pts[t.identifier] = pos(t); drawAll(); }, { passive: false });
   cv.addEventListener('touchmove', e => { e.preventDefault(); for (const t of e.changedTouches) pts[t.identifier] = pos(t); drawAll(); }, { passive: false });
   const end = e => { for (const t of e.changedTouches) delete pts[t.identifier]; drawAll(); };
   cv.addEventListener('touchend', end); cv.addEventListener('touchcancel', end);
+  clearB.addEventListener('click', () => { for (const k in pts) delete pts[k]; drawAll(); });
+  window.addEventListener('resize', size);
+  requestAnimationFrame(size);
   return () => window.removeEventListener('resize', size);
 }
 
@@ -904,159 +922,5 @@ function toolDraw(body, opts) {
     '<div class="ic">' + IC('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/>') + '</div><b>Draw</b><span>Paint the full screen</span>');
   b.addEventListener('click', () => openTool('Draw test', toolDraw, true));
   $('gridA').appendChild(b);
-})();
-</script>
-
-<style>
-.citrow{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:var(--bg);
-  border:1px solid var(--line); border-radius:12px; padding:13px 14px; margin:8px 0;
-  font-family:inherit; color:var(--ink); cursor:pointer; font-size:15px; }
-.citrow small{ display:block; color:var(--muted); font-size:12px; margin-top:2px; }
-.citrow:active{ background:var(--soft); }
-.badge{ margin-left:auto; flex:none; font-size:12px; font-weight:700; padding:4px 12px; border-radius:20px; }
-.badge.pass{ background:#e6f4ea; color:#1a7f37; }
-.badge.fail{ background:#fdecea; color:#cf222e; }
-.badge.todo{ background:var(--soft); color:var(--muted); }
-@media (prefers-color-scheme: dark){
-  .badge.pass{ background:#12341f; color:#7ee2a0; }
-  .badge.fail{ background:#3d1414; color:#ff9d97; }
-}
-.citbar{ position:sticky; bottom:0; display:grid; grid-template-columns:1fr 1fr; gap:8px;
-  padding:12px 0 6px; background:var(--bg); }
-.citbar .btn.failbtn{ background:#cf222e; color:#fff; }
-.citbar .btn.passbtn{ background:#1a7f37; color:#fff; }
-.citsub{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
-.citsub h3{ margin:0; font-size:16px; flex:1; }
-.citstage{ position:relative; height:68vh; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
-</style>
-<script>
-"use strict";
-/* ---------- CIT-only mock tests (browser-feasible) ---------- */
-function toolReceiver(body) {
-  body.appendChild(hint('Hold the phone to your ear like on a call, then play the tone. You should hear a faint sound from the earpiece slit.'));
-  let actx = null;
-  const pBtn = btn('Play earpiece tone', () => {
-    try {
-      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
-      if (actx.state === 'suspended') actx.resume();
-      const o = actx.createOscillator(), g = actx.createGain();
-      o.frequency.value = 880; o.connect(g); g.connect(actx.destination);
-      const t = actx.currentTime;
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.06, t + 0.1);
-      g.gain.setValueAtTime(0.06, t + 2.4);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
-      o.start(t); o.stop(t + 2.7);
-    } catch (e) { body.appendChild(errBox('Audio failed: ' + e.message)); }
-  });
-  body.appendChild(pBtn);
-  return () => { if (actx) actx.close().catch(() => {}); };
-}
-function toolWifi(body) {
-  body.appendChild(hint('Connection details. Open any website in your browser — if it loads, the radio is fine.'));
-  const c = navigator.connection || {};
-  body.appendChild(readout('Online', navigator.onLine ? 'Yes' : 'No'));
-  if (c.effectiveType) body.appendChild(readout('Network type', (c.type || 'unknown') + ' · ' + c.effectiveType.toUpperCase()));
-  if (c.downlink) body.appendChild(readout('Est. downlink', c.downlink + ' Mbps'));
-  if (c.rtt != null) body.appendChild(readout('Est. RTT', c.rtt + ' ms'));
-  return () => {};
-}
-function toolBluetooth(body) {
-  body.appendChild(hint('Checks Bluetooth radio availability. Pairing itself is done in system settings.'));
-  if ('bluetooth' in navigator)
-    body.appendChild(okBox('<b>Bluetooth API available.</b><br>Toggle Bluetooth in settings and pair a device to confirm the radio works.'));
-  else
-    body.appendChild(errBox('<b>Bluetooth not exposed to the browser.</b><br>Needs Chrome on Android. Check it in system settings instead.'));
-  return () => {};
-}
-function toolStorage(body) {
-  body.appendChild(hint('Internal storage reported by the browser.'));
-  const wrap = el('div'); body.appendChild(wrap);
-  wrap.appendChild(el('p', 'hint center', 'Reading…'));
-  (async () => {
-    wrap.innerHTML = '';
-    try {
-      const e = await navigator.storage.estimate();
-      const used = (e.usage / 1e9).toFixed(1), free = ((e.quota - e.usage) / 1e9).toFixed(1);
-      wrap.appendChild(readout('Used', used + ' GB'));
-      wrap.appendChild(readout('Free', free + ' GB'));
-      const m = el('div', 'meter', '<div style="width:' + Math.min(100, e.usage / e.quota * 100) + '%"></div>');
-      wrap.appendChild(m);
-    } catch (err) { wrap.appendChild(errBox('Storage info unavailable.')); }
-  })();
-  return () => {};
-}
-
-/* ---------- CIT factory test mode (Xiaomi-style) ---------- */
-const CIT_TESTS = [
-  { name:'Touch panel', desc:'Draw to cover the screen', run:(b, done) => toolDraw(b, { onExit: done, onPass: () => citAuto(0) }) },
-  { name:'Display', desc:'Colour & dead-pixel check', run:(b, done) => toolScreen(b, { onExit: done }) },
-  { name:'Speaker', desc:'Loudspeaker tone test', run:(b, done) => toolSpeaker(b) },
-  { name:'Receiver', desc:'Earpiece tone test', run:(b, done) => toolReceiver(b) },
-  { name:'Vibration', desc:'Motor patterns', run:(b, done) => toolVibration(b) },
-  { name:'Back camera', desc:'Rear camera preview', run:(b, done) => toolCamera(b, 'environment') },
-  { name:'Front camera', desc:'Selfie camera preview', run:(b, done) => toolCamera(b, 'user') },
-  { name:'Fingerprint sensor', desc:'Biometric hardware', run:(b, done) => toolBiometric(b) },
-  { name:'Light sensor', desc:'Ambient light level', run:(b, done) => toolLight(b) },
-  { name:'Accelerometer', desc:'Motion values', run:(b, done) => toolMotion(b) },
-  { name:'Gyroscope', desc:'Rotation rate', run:(b, done) => toolMotion(b) },
-  { name:'Magnetic sensor', desc:'Compass heading', run:(b, done) => toolCompass(b) },
-  { name:'Battery', desc:'Level & charging state', run:(b, done) => toolBattery(b) },
-  { name:'WiFi', desc:'Connection info', run:(b, done) => toolWifi(b) },
-  { name:'Bluetooth', desc:'Radio availability', run:(b, done) => toolBluetooth(b) },
-  { name:'Storage', desc:'Free space', run:(b, done) => toolStorage(b) },
-];
-const citStatus = new Array(CIT_TESTS.length).fill(null); // null | 'pass' | 'fail'
-function citAuto(i) { if (!citStatus[i]) citStatus[i] = 'pass'; }
-function toolCIT(body) {
-  let testCleanup = null;
-  function showList() {
-    if (testCleanup) { try { testCleanup(); } catch (e) {} testCleanup = null; }
-    body.innerHTML = '';
-    const p = citStatus.filter(s => s === 'pass').length, f = citStatus.filter(s => s === 'fail').length;
-    body.appendChild(hint('Xiaomi CIT-style factory test. Open each item, follow the check, then tap PASS or FAIL — just like the service menu.'));
-    body.appendChild(el('p', 'hint', '<b style="color:var(--ink)">' + p + ' passed</b> · <b style="color:var(--ink)">' + f + ' failed</b> · ' + (CIT_TESTS.length - p - f) + ' remaining'));
-    CIT_TESTS.forEach((t, i) => {
-      const st = citStatus[i];
-      const row = el('button', 'citrow',
-        '<div><b>' + (i + 1) + '. ' + t.name + '</b><small>' + t.desc + '</small></div>' +
-        '<span class="badge ' + (st || 'todo') + '">' + (st === 'pass' ? 'PASS' : st === 'fail' ? 'FAIL' : '—') + '</span>');
-      row.addEventListener('click', () => openCIT(i));
-      body.appendChild(row);
-    });
-    const rs = btn('Reset results', () => { citStatus.fill(null); showList(); }, true);
-    body.appendChild(rs);
-  }
-  function openCIT(i) {
-    body.innerHTML = '';
-    const sub = el('div', 'citsub',
-      '<button class="backbtn" id="citBack" aria-label="Back">←</button><h3>' + (i + 1) + '. ' + CIT_TESTS[i].name + '</h3>');
-    body.appendChild(sub);
-    sub.querySelector('#citBack').addEventListener('click', showList);
-    const stage = el('div', 'citstage');
-    body.appendChild(stage);
-    testCleanup = CIT_TESTS[i].run(stage, showList) || null;
-    const bar = el('div', 'citbar');
-    const fb = el('button', 'btn failbtn', '✕ FAIL');
-    const pb = el('button', 'btn passbtn', '✓ PASS');
-    fb.addEventListener('click', () => { citStatus[i] = 'fail'; showList(); });
-    pb.addEventListener('click', () => { citStatus[i] = 'pass'; showList(); });
-    bar.appendChild(fb); bar.appendChild(pb);
-    body.appendChild(bar);
-  }
-  showList();
-  return () => {
-    if (testCleanup) { try { testCleanup(); } catch (e) {} testCleanup = null; }
-  };
-}
-/* register the Factory test card */
-(function () {
-  const card = el('div', 'card');
-  card.innerHTML = '<h2>Factory test mode</h2><p class="sub">Xiaomi CIT-style hardware test sequence — open each test, then tap PASS or FAIL.</p>';
-  const b = btn('Open factory test');
-  b.addEventListener('click', () => openTool('Factory test', toolCIT, false));
-  card.appendChild(b);
-  const main = document.querySelector('main');
-  main.insertBefore(card, main.querySelector('.secttl'));
 })();
 </script>
